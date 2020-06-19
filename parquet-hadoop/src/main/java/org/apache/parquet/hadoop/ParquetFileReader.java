@@ -54,6 +54,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.CRC32;
 
+import org.apache.arrow.plasma.*;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -1456,6 +1458,28 @@ public class ParquetFileReader implements Closeable {
         return col.equals(((ChunkDescriptor) obj).col);
       } else {
         return false;
+      }
+    }
+  }
+
+
+  private String plasmaCacheSocket = "/tmp/plasmaStore";
+  private int clientPoolSize = 20;
+  List<PlasmaClient> plasmaClients = new ArrayList<>(clientPoolSize);
+  /**
+   * initialize plasma Clients
+   */
+  public void initPlamaClients() {
+    try {
+      System.loadLibrary("plasma_java");
+    } catch (Exception e) {
+      LOG.error("load plasma jni lib failed" + e.getMessage());
+    }
+    for(PlasmaClient plasmaClient: plasmaClients){
+      try {
+        plasmaClient = new PlasmaClient(plasmaCacheSocket, "", 0);
+      }catch (Exception e){
+        LOG.error("Error occurred when connecting to plasma server: "+ e.getMessage());
       }
     }
   }
