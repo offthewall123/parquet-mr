@@ -670,6 +670,7 @@ public class ParquetFileReader implements Closeable {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
     this.crc = options.usePageChecksumVerification() ? new CRC32() : null;
+    initPlamaClients();
   }
 
   /**
@@ -707,6 +708,7 @@ public class ParquetFileReader implements Closeable {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
     this.crc = options.usePageChecksumVerification() ? new CRC32() : null;
+    initPlamaClients();
   }
 
   public ParquetFileReader(InputFile file, ParquetReadOptions options) throws IOException {
@@ -730,6 +732,7 @@ public class ParquetFileReader implements Closeable {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
     this.crc = options.usePageChecksumVerification() ? new CRC32() : null;
+    initPlamaClients();
   }
 
   private static <T> List<T> listWithNulls(int size) {
