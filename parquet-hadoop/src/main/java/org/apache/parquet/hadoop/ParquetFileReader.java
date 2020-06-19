@@ -50,10 +50,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.CRC32;
 
+import it.unimi.dsi.fastutil.Hash;
 import org.apache.arrow.plasma.*;
 
 import org.apache.hadoop.conf.Configuration;
@@ -1468,7 +1471,13 @@ public class ParquetFileReader implements Closeable {
 
   private String plasmaCacheSocket = "/tmp/plasmaStore";
   private int clientPoolSize = 20;
+  private AtomicInteger clientRoundRobin = new AtomicInteger(0);
   List<PlasmaClient> plasmaClients = new ArrayList<>(clientPoolSize);
+
+  public byte[] hash(String key){
+
+  }
+
   /**
    * initialize plasma Clients
    */
@@ -1493,7 +1502,7 @@ public class ParquetFileReader implements Closeable {
    */
   private class ConsecutivePartList {
 
-    private final long offset;
+    private long offset;
     private int length;
     private final List<ChunkDescriptor> chunks = new ArrayList<ChunkDescriptor>();
 
@@ -1520,6 +1529,24 @@ public class ParquetFileReader implements Closeable {
      * @throws IOException if there is an error while reading from the stream
      */
     public void readAll(SeekableInputStream f, ChunkListBuilder builder) throws IOException {
+      for (int i = 0;i<chunks.size();i++){
+        PlasmaClient plasmaClient = plasmaClients.get(clientRoundRobin.getAndAdd(1) % clientPoolSize);
+        ChunkDescriptor descriptor= chunks.get(i);
+        byte [] objectId = hash(descriptor.metadata.getPath().toString());
+        if (plasmaClient.contains(objectId)) {
+          ByteBuffer byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
+          List<ByteBuffer> byteBufferList = new ArrayList<>();
+          byteBufferList.add(byteBuffer);
+          builder.add(descriptor, byteBufferList, f);
+        } else {
+          ByteBuffer buff = plasmaClient.create(objectId, descriptor.size);
+          f.seek(offset);
+          f.readFully(buff);
+          
+
+        }
+
+      }
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
       f.seek(offset);
 
