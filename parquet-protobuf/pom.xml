@@ -161,7 +161,7 @@
               <goal>run</goal>
             </goals>
             <configuration>
-              <protocVersion>${protobuf.version}</protocVersion>
+              <protocArtifact>com.google.protobuf:protoc:3.5.1</protocArtifact>
               <addSources>test</addSources>
               <addProtoSources>all</addProtoSources>
               <outputDirectory>${project.build.directory}/generated-test-sources/java</outputDirectory>
