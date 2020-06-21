@@ -1475,7 +1475,8 @@ public class ParquetFileReader implements Closeable {
   List<PlasmaClient> plasmaClients = new ArrayList<>(clientPoolSize);
 
   public byte[] hash(String key){
-
+    byte[] res= new byte[10];
+    return res;
   }
 
   /**
@@ -1541,12 +1542,12 @@ public class ParquetFileReader implements Closeable {
         } else {
           ByteBuffer byteBuffer = plasmaClient.create(objectId, descriptor.size);
           f.seek(offset);
-          f.readFully(buff);
+          f.readFully(byteBuffer);
           List<ByteBuffer> byteBufferList = new ArrayList<>();
-          byteBufferList.add(buff);
+          byteBufferList.add(byteBuffer);
           builder.add(descriptor, byteBufferList, f);
         }
-        offset += descriptor.size();
+        offset += descriptor.size;
       }
     }
 
