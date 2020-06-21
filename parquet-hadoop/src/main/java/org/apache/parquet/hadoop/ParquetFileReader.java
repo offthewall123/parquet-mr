@@ -1472,9 +1472,9 @@ public class ParquetFileReader implements Closeable {
 
 
   private String plasmaCacheSocket = "/tmp/plasmaStore";
-  private int clientPoolSize = 20;
+  public int clientPoolSize = 20;
   private AtomicInteger clientRoundRobin = new AtomicInteger(0);
-  List<PlasmaClient> plasmaClients = new ArrayList<>(clientPoolSize);
+  List<PlasmaClient> plasmaClients = new ArrayList<>();
 
   public byte[] hash(String key){
     byte[] res= new byte[20];
@@ -1491,9 +1491,10 @@ public class ParquetFileReader implements Closeable {
     } catch (Exception e) {
       LOG.error("load plasma jni lib failed" + e.getMessage());
     }
-    for(PlasmaClient plasmaClient: plasmaClients){
+    for (int i=0;i<clientPoolSize;i++){
       try {
-        plasmaClient = new PlasmaClient(plasmaCacheSocket, "", 0);
+        PlasmaClient plasmaClient = plasmaClient = new PlasmaClient(plasmaCacheSocket, "", 0);
+        plasmaClients.add(plasmaClient);
       }catch (Exception e){
         LOG.error("Error occurred when connecting to plasma server: "+ e.getMessage());
       }
@@ -1543,12 +1544,18 @@ public class ParquetFileReader implements Closeable {
           byteBufferList.add(byteBuffer);
           builder.add(descriptor, byteBufferList, f);
         } else {
-          ByteBuffer byteBuffer = plasmaClient.create(objectId, descriptor.size);
+          ByteBuffer byteBuffer = null;
+          try{
+             byteBuffer = plasmaClient.create(objectId, descriptor.size);
+          }catch (Exception e){
+            LOG.error("Error occurred when creating cache byteBuffer: "+ e.getMessage());
+          }
           f.seek(offset);
           f.readFully(byteBuffer);
           List<ByteBuffer> byteBufferList = new ArrayList<>();
           byteBufferList.add(byteBuffer);
           builder.add(descriptor, byteBufferList, f);
+          System.out.println(plasmaClient.contains(objectId));
         }
         offset += descriptor.size;
       }

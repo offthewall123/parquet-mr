@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.column.ColumnDescriptor;
+import org.apache.parquet.column.page.PageReadStore;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
@@ -42,6 +43,7 @@ import org.mockito.Mockito;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 
 import static org.apache.parquet.column.Encoding.BIT_PACKED;
@@ -85,50 +87,46 @@ public class TestParquetFileReader {
 
     Path path = new Path(testFile.toURI());
     Configuration configuration = new Configuration();
+
     ParquetFileWriter w = new ParquetFileWriter(configuration, SCHEMA, path);
     w.start();
+
+    w.startBlock(3);
+    w.startColumn(C1, 5, CODEC);
+    long c1Starts = w.getPos();
+    w.writeDataPage(2, 4, BytesInput.from(BYTES1), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
+    w.writeDataPage(3, 4, BytesInput.from(BYTES1), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
+    w.endColumn();
+    long c1Ends = w.getPos();
+
+    w.startColumn(C2, 6, CODEC);
+    long c2Starts = w.getPos();
+    w.writeDataPage(2, 4, BytesInput.from(BYTES2), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
+    w.writeDataPage(3, 4, BytesInput.from(BYTES2), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
+    w.writeDataPage(1, 4, BytesInput.from(BYTES2), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
+    w.endColumn();
+    long c2Ends = w.getPos();
+
+    w.endBlock();
+
     w.startBlock(4);
+
     w.startColumn(C1, 7, CODEC);
     w.writeDataPage(7, 4, BytesInput.from(BYTES3), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
     w.endColumn();
     w.startColumn(C2, 8, CODEC);
     w.writeDataPage(8, 4, BytesInput.from(BYTES4), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
     w.endColumn();
-    w.endBlock();
-    w.startBlock(4);
-    w.startColumn(C1, 5, CODEC);
-    long c1p1Starts = w.getPos();
-    w.writeDataPage(2, 4, BytesInput.from(BYTES1), statsC1(null, Binary.fromString("aaa")), 1, BIT_PACKED, BIT_PACKED,
-      PLAIN);
-    long c1p2Starts = w.getPos();
-    w.writeDataPage(3, 4, BytesInput.from(BYTES1), statsC1(Binary.fromString("bbb"), Binary.fromString("ccc")), 3,
-      BIT_PACKED, BIT_PACKED, PLAIN);
-    w.endColumn();
-    long c1Ends = w.getPos();
-    w.startColumn(C2, 6, CODEC);
-    long c2p1Starts = w.getPos();
-    w.writeDataPage(2, 4, BytesInput.from(BYTES2), statsC2(117l, 100l), 1, BIT_PACKED, BIT_PACKED, PLAIN);
-    long c2p2Starts = w.getPos();
-    w.writeDataPage(3, 4, BytesInput.from(BYTES2), statsC2(null, null, null), 2, BIT_PACKED, BIT_PACKED, PLAIN);
-    long c2p3Starts = w.getPos();
-    w.writeDataPage(1, 4, BytesInput.from(BYTES2), statsC2(0l), 1, BIT_PACKED, BIT_PACKED, PLAIN);
-    w.endColumn();
-    long c2Ends = w.getPos();
-    w.endBlock();
-    w.startBlock(4);
-    w.startColumn(C1, 7, CODEC);
-    w.writeDataPage(7, 4, BytesInput.from(BYTES3),
-      // Creating huge stats so the column index will reach the limit and won't be written
-      statsC1(
-        Binary.fromConstantByteArray(new byte[(int) MAX_STATS_SIZE]),
-        Binary.fromConstantByteArray(new byte[1])),
-      4, BIT_PACKED, BIT_PACKED, PLAIN);
-    w.endColumn();
-    w.startColumn(C2, 8, CODEC);
-    w.writeDataPage(8, 4, BytesInput.from(BYTES4), EMPTY_STATS, BIT_PACKED, BIT_PACKED, PLAIN);
-    w.endColumn();
+
     w.endBlock();
     w.end(new HashMap<String, String>());
+
+    ParquetMetadata readFooter = ParquetFileReader.readFooter(configuration, path);
+    ParquetFileReader r = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
+      readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
+
+    PageReadStore pages = r.readNextRowGroup();
+
 
   }
 
