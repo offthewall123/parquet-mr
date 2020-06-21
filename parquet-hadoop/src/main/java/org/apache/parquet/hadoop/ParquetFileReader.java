@@ -113,6 +113,8 @@ import org.apache.yetus.audience.InterfaceAudience.Private;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.hash.Hashing;
+
 /**
  * Internal implementation of the Parquet file reader as a block container
  */
@@ -1475,7 +1477,8 @@ public class ParquetFileReader implements Closeable {
   List<PlasmaClient> plasmaClients = new ArrayList<>(clientPoolSize);
 
   public byte[] hash(String key){
-    byte[] res= new byte[10];
+    byte[] res= new byte[20];
+    Hashing.murmur3_128().newHasher().putBytes(key.getBytes()).hash().writeBytesTo(res, 0, 20);
     return res;
   }
 
@@ -1501,7 +1504,7 @@ public class ParquetFileReader implements Closeable {
    * Describes a list of consecutive parts to be read at once. A consecutive part may contain whole column chunks or
    * only parts of them (some pages).
    */
-  private class ConsecutivePartList {
+  public class ConsecutivePartList {
 
     private long offset;
     private int length;
