@@ -1552,6 +1552,7 @@ public class ParquetFileReader implements Closeable {
           }
           f.seek(offset);
           f.readFully(byteBuffer);
+          plasmaClient.seal(objectId);
           List<ByteBuffer> byteBufferList = new ArrayList<>();
           byteBufferList.add(byteBuffer);
           builder.add(descriptor, byteBufferList, f);
