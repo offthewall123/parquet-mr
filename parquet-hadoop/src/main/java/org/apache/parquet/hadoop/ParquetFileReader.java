@@ -1556,7 +1556,6 @@ public class ParquetFileReader implements Closeable {
           List<ByteBuffer> byteBufferList = new ArrayList<>();
           byteBufferList.add(byteBuffer);
           builder.add(descriptor, byteBufferList, f);
-          System.out.println(plasmaClient.contains(objectId));
         }
         offset += descriptor.size;
       }
