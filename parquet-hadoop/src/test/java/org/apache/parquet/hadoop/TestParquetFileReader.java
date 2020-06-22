@@ -25,7 +25,10 @@ import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.bytes.BytesInput;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.Encoding;
+import org.apache.parquet.column.page.DataPage;
+import org.apache.parquet.column.page.DataPageV1;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.column.page.PageReader;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
@@ -51,7 +54,7 @@ import java.util.HashSet;
 import static org.apache.parquet.column.Encoding.BIT_PACKED;
 import static org.apache.parquet.column.Encoding.PLAIN;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.MAX_STATS_SIZE;
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 public class TestParquetFileReader {
 
@@ -80,6 +83,13 @@ public class TestParquetFileReader {
 
   @Rule
   public final TemporaryFolder temp = new TemporaryFolder();
+
+  private void validateContains(MessageType schema, PageReadStore pages, String[] path, int values, BytesInput bytes) throws IOException {
+    PageReader pageReader = pages.getPageReader(schema.getColumnDescription(path));
+    DataPage page = pageReader.readPage();
+    assertEquals(values, page.getValueCount());
+    assertArrayEquals(bytes.toByteArray(), ((DataPageV1)page).getBytes().toByteArray());
+  }
 
   @Test
   public void testReadAll() throws IOException {
@@ -132,7 +142,9 @@ public class TestParquetFileReader {
       readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
 
     PageReadStore pages = r.readNextRowGroup();
-
+    assertEquals(3, pages.getRowCount());
+    validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
+    validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
 
   }
 
