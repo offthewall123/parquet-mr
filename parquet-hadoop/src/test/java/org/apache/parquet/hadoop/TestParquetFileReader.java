@@ -93,7 +93,6 @@ public class TestParquetFileReader {
 
   @Test
   public void testReadAll() throws IOException {
-    System.out.println("parquetFileReader tests");
 
     File testFile = temp.newFile();
     testFile.delete();
