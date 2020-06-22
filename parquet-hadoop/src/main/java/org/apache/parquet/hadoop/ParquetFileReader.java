@@ -1159,7 +1159,7 @@ public class ParquetFileReader implements Closeable {
    * Builder to concatenate the buffers of the discontinuous parts for the same column. These parts are generated as a
    * result of the column-index based filtering when some pages might be skipped at reading.
    */
-  private class ChunkListBuilder {
+  public class ChunkListBuilder {
     private class ChunkData {
       final List<ByteBuffer> buffers = new ArrayList<>();
       OffsetIndex offsetIndex;
