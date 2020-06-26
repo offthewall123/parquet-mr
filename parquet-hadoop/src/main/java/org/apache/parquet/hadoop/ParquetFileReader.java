@@ -46,7 +46,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.hash.Hashing;
+import org.apache.arrow.plasma.PlasmaClient;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -645,6 +648,7 @@ public class ParquetFileReader implements Closeable {
     for (ColumnDescriptor col : columns) {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
+    initPlasmaClients();
   }
 
   /**
@@ -679,6 +683,7 @@ public class ParquetFileReader implements Closeable {
     for (ColumnDescriptor col : footer.getFileMetaData().getSchema().getColumns()) {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
+    initPlasmaClients();
   }
 
   public ParquetFileReader(InputFile file, ParquetReadOptions options) throws IOException {
@@ -692,6 +697,7 @@ public class ParquetFileReader implements Closeable {
     for (ColumnDescriptor col : footer.getFileMetaData().getSchema().getColumns()) {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
+    initPlasmaClients();
   }
 
   public ParquetMetadata getFooter() {
@@ -1091,6 +1097,35 @@ public class ParquetFileReader implements Closeable {
 
   }
 
+  private String plasmaCacheSocket = "/tmp/plasmaStore";
+  public int clientPoolSize = 20;
+  private AtomicInteger clientRoundRobin = new AtomicInteger(0);
+  List<PlasmaClient> plasmaClients = new ArrayList<>();
+
+  public byte[] hash(String key){
+    byte[] res= new byte[20];
+    Hashing.murmur3_128().newHasher().putBytes(key.getBytes()).hash().writeBytesTo(res, 0, 20);
+    return res;
+  }
+
+  /**
+   * initialize plasma Clients
+   */
+  public void initPlasmaClients() {
+    try {
+      System.loadLibrary("plasma_java");
+    } catch (Exception e) {
+      LOG.error("load plasma jni lib failed" + e.getMessage());
+    }
+    for (int i=0;i<clientPoolSize;i++){
+      try {
+        PlasmaClient plasmaClient = plasmaClient = new PlasmaClient(plasmaCacheSocket, "", 0);
+        plasmaClients.add(plasmaClient);
+      }catch (Exception e){
+        LOG.error("Error occurred when connecting to plasma server: "+ e.getMessage());
+      }
+    }
+  }
 
   /**
    * information needed to read a column chunk
@@ -1127,6 +1162,7 @@ public class ParquetFileReader implements Closeable {
   private class ConsecutiveChunkList {
 
     private final long offset;
+    private long currentOffset;
     private int length;
     private final List<ChunkDescriptor> chunks = new ArrayList<ChunkDescriptor>();
 
@@ -1135,6 +1171,7 @@ public class ParquetFileReader implements Closeable {
      */
     ConsecutiveChunkList(long offset) {
       this.offset = offset;
+      this.currentOffset = offset;
     }
 
     /**
