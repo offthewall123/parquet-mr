@@ -1191,40 +1191,78 @@ public class ParquetFileReader implements Closeable {
      */
     public List<Chunk> readAll(SeekableInputStream f) throws IOException {
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
-      f.seek(offset);
-
-      int fullAllocations = length / options.getMaxAllocationSize();
-      int lastAllocationSize = length % options.getMaxAllocationSize();
-
-      int numAllocations = fullAllocations + (lastAllocationSize > 0 ? 1 : 0);
-      List<ByteBuffer> buffers = new ArrayList<>(numAllocations);
-
-      for (int i = 0; i < fullAllocations; i += 1) {
-        buffers.add(options.getAllocator().allocate(options.getMaxAllocationSize()));
+      for(int i = 0;i<chunks.size();i++){
+        PlasmaClient plasmaClient = plasmaClients.get(clientRoundRobin.getAndAdd(1) % clientPoolSize);
+        ChunkDescriptor descriptor= chunks.get(i);
+        byte [] objectId = hash(descriptor.metadata.getPath().toString());
+        if (plasmaClient.contains(objectId)) {
+          ByteBuffer byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
+          List<ByteBuffer> byteBufferList = new ArrayList<>();
+          byteBufferList.add(byteBuffer);
+          if (i < chunks.size() - 1) {
+            result.add(new Chunk(descriptor, byteBufferList));
+          } else {
+            // because of a bug, the last chunk might be larger than descriptor.size
+            result.add(new WorkaroundChunk(descriptor, byteBufferList, f));
+          }
+        } else {
+          ByteBuffer byteBuffer = null;
+          try{
+            byteBuffer = plasmaClient.create(objectId, descriptor.size);
+          }catch (Exception e){
+            LOG.error("Error occurred when creating cache byteBuffer: "+ e.getMessage());
+          }
+          f.seek(currentOffset);
+          f.readFully(byteBuffer);
+          plasmaClient.seal(objectId);
+          List<ByteBuffer> byteBufferList = new ArrayList<>();
+          byteBuffer.flip();
+          byteBufferList.add(byteBuffer);
+          if (i < chunks.size() - 1) {
+            result.add(new Chunk(descriptor, byteBufferList));
+          } else {
+            // because of a bug, the last chunk might be larger than descriptor.size
+            result.add(new WorkaroundChunk(descriptor, byteBufferList, f));
+          }
+        }
+        currentOffset += descriptor.size;
       }
-
-      if (lastAllocationSize > 0) {
-        buffers.add(options.getAllocator().allocate(lastAllocationSize));
-      }
-
-      for (ByteBuffer buffer : buffers) {
-        f.readFully(buffer);
-        buffer.flip();
-      }
-
       // report in a counter the data we just scanned
       BenchmarkCounter.incrementBytesRead(length);
-      ByteBufferInputStream stream = ByteBufferInputStream.wrap(buffers);
-      for (int i = 0; i < chunks.size(); i++) {
-        ChunkDescriptor descriptor = chunks.get(i);
-        if (i < chunks.size() - 1) {
-          result.add(new Chunk(descriptor, stream.sliceBuffers(descriptor.size)));
-        } else {
-          // because of a bug, the last chunk might be larger than descriptor.size
-          result.add(new WorkaroundChunk(descriptor, stream.sliceBuffers(descriptor.size), f));
-        }
-      }
-      return result ;
+//      f.seek(offset);
+//
+//      int fullAllocations = length / options.getMaxAllocationSize();
+//      int lastAllocationSize = length % options.getMaxAllocationSize();
+//
+//      int numAllocations = fullAllocations + (lastAllocationSize > 0 ? 1 : 0);
+//      List<ByteBuffer> buffers = new ArrayList<>(numAllocations);
+//
+//      for (int i = 0; i < fullAllocations; i += 1) {
+//        buffers.add(options.getAllocator().allocate(options.getMaxAllocationSize()));
+//      }
+//
+//      if (lastAllocationSize > 0) {
+//        buffers.add(options.getAllocator().allocate(lastAllocationSize));
+//      }
+//
+//      for (ByteBuffer buffer : buffers) {
+//        f.readFully(buffer);
+//        buffer.flip();
+//      }
+//
+//      // report in a counter the data we just scanned
+//      BenchmarkCounter.incrementBytesRead(length);
+//      ByteBufferInputStream stream = ByteBufferInputStream.wrap(buffers);
+//      for (int i = 0; i < chunks.size(); i++) {
+//        ChunkDescriptor descriptor = chunks.get(i);
+//        if (i < chunks.size() - 1) {
+//          result.add(new Chunk(descriptor, stream.sliceBuffers(descriptor.size)));
+//        } else {
+//          // because of a bug, the last chunk might be larger than descriptor.size
+//          result.add(new WorkaroundChunk(descriptor, stream.sliceBuffers(descriptor.size), f));
+//        }
+//      }
+      return result;
     }
 
     /**
