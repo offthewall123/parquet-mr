@@ -808,7 +808,7 @@ public class ParquetFileReader implements Closeable {
     }
     // actually read all the chunks
     for (ConsecutiveChunkList consecutiveChunks : allChunks) {
-      final List<Chunk> chunks = consecutiveChunks.readAll(f);
+      final List<Chunk> chunks = consecutiveChunks.readAll(f, currentBlock);
       for (Chunk chunk : chunks) {
         currentRowGroup.addColumn(chunk.descriptor.col, chunk.readAllPages());
       }
@@ -1189,12 +1189,12 @@ public class ParquetFileReader implements Closeable {
      * @return the chunks
      * @throws IOException if there is an error while reading from the stream
      */
-    public List<Chunk> readAll(SeekableInputStream f) throws IOException {
+    public List<Chunk> readAll(SeekableInputStream f, int currentBlock) throws IOException {
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
       for(int i = 0;i<chunks.size();i++){
         PlasmaClient plasmaClient = plasmaClients.get(clientRoundRobin.getAndAdd(1) % clientPoolSize);
         ChunkDescriptor descriptor= chunks.get(i);
-        byte [] objectId = hash(descriptor.metadata.getPath().toString());
+        byte [] objectId = hash(String.valueOf(descriptor.hashCode()+currentBlock));
         if (plasmaClient.contains(objectId)) {
           ByteBuffer byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
           List<ByteBuffer> byteBufferList = new ArrayList<>();
@@ -1229,39 +1229,6 @@ public class ParquetFileReader implements Closeable {
       }
       // report in a counter the data we just scanned
       BenchmarkCounter.incrementBytesRead(length);
-//      f.seek(offset);
-//
-//      int fullAllocations = length / options.getMaxAllocationSize();
-//      int lastAllocationSize = length % options.getMaxAllocationSize();
-//
-//      int numAllocations = fullAllocations + (lastAllocationSize > 0 ? 1 : 0);
-//      List<ByteBuffer> buffers = new ArrayList<>(numAllocations);
-//
-//      for (int i = 0; i < fullAllocations; i += 1) {
-//        buffers.add(options.getAllocator().allocate(options.getMaxAllocationSize()));
-//      }
-//
-//      if (lastAllocationSize > 0) {
-//        buffers.add(options.getAllocator().allocate(lastAllocationSize));
-//      }
-//
-//      for (ByteBuffer buffer : buffers) {
-//        f.readFully(buffer);
-//        buffer.flip();
-//      }
-//
-//      // report in a counter the data we just scanned
-//      BenchmarkCounter.incrementBytesRead(length);
-//      ByteBufferInputStream stream = ByteBufferInputStream.wrap(buffers);
-//      for (int i = 0; i < chunks.size(); i++) {
-//        ChunkDescriptor descriptor = chunks.get(i);
-//        if (i < chunks.size() - 1) {
-//          result.add(new Chunk(descriptor, stream.sliceBuffers(descriptor.size)));
-//        } else {
-//          // because of a bug, the last chunk might be larger than descriptor.size
-//          result.add(new WorkaroundChunk(descriptor, stream.sliceBuffers(descriptor.size), f));
-//        }
-//      }
       return result;
     }
 
