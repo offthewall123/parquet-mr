@@ -31,16 +31,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.SequenceInputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -50,6 +42,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.hash.Hashing;
 import org.apache.arrow.plasma.PlasmaClient;
+import org.apache.arrow.plasma.exceptions.DuplicateObjectException;
+import org.apache.arrow.plasma.exceptions.PlasmaGetException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -648,7 +642,6 @@ public class ParquetFileReader implements Closeable {
     for (ColumnDescriptor col : columns) {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
-    initPlasmaClients();
   }
 
   /**
@@ -683,7 +676,6 @@ public class ParquetFileReader implements Closeable {
     for (ColumnDescriptor col : footer.getFileMetaData().getSchema().getColumns()) {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
-    initPlasmaClients();
   }
 
   public ParquetFileReader(InputFile file, ParquetReadOptions options) throws IOException {
@@ -697,7 +689,6 @@ public class ParquetFileReader implements Closeable {
     for (ColumnDescriptor col : footer.getFileMetaData().getSchema().getColumns()) {
       paths.put(ColumnPath.get(col.getPath()), col);
     }
-    initPlasmaClients();
   }
 
   public ParquetMetadata getFooter() {
@@ -1097,10 +1088,10 @@ public class ParquetFileReader implements Closeable {
 
   }
 
-  private String plasmaCacheSocket = "/tmp/plasmaStore";
-  public int clientPoolSize = 20;
+  private static String plasmaCacheSocket = "/tmp/plasmaStore";
+  public static int clientPoolSize = 20;
   private AtomicInteger clientRoundRobin = new AtomicInteger(0);
-  List<PlasmaClient> plasmaClients = new ArrayList<>();
+  static List<PlasmaClient> plasmaClients = new ArrayList<>();
 
   public byte[] hash(String key){
     byte[] res= new byte[20];
@@ -1111,7 +1102,8 @@ public class ParquetFileReader implements Closeable {
   /**
    * initialize plasma Clients
    */
-  public void initPlasmaClients() {
+  static {
+    LOG.debug("************************* initializing plasma clients");
     try {
       System.loadLibrary("plasma_java");
     } catch (Exception e) {
@@ -1162,7 +1154,7 @@ public class ParquetFileReader implements Closeable {
   private class ConsecutiveChunkList {
 
     private final long offset;
-    private long currentOffset;
+    private long currentOffSet;
     private int length;
     private final List<ChunkDescriptor> chunks = new ArrayList<ChunkDescriptor>();
 
@@ -1171,7 +1163,7 @@ public class ParquetFileReader implements Closeable {
      */
     ConsecutiveChunkList(long offset) {
       this.offset = offset;
-      this.currentOffset = offset;
+      this.currentOffSet = offset;
     }
 
     /**
@@ -1184,6 +1176,21 @@ public class ParquetFileReader implements Closeable {
       length += descriptor.size;
     }
 
+    public ByteBuffer cache (byte [] objectId, SeekableInputStream f, PlasmaClient plasmaClient, int size) throws IOException {
+      ByteBuffer byteBuffer =null;
+      try {
+        byteBuffer = plasmaClient.create(objectId, size);
+        f.readFully(byteBuffer);
+        byteBuffer.flip();
+        plasmaClient.seal(objectId);
+      } catch (DuplicateObjectException e) {
+        LOG.warn("Duplicate Object: "+ e.getMessage());
+        byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
+      }
+
+      return byteBuffer;
+    }
+
     /**
      * @param f file to read the chunks from
      * @return the chunks
@@ -1194,38 +1201,32 @@ public class ParquetFileReader implements Closeable {
       for(int i = 0;i<chunks.size();i++){
         PlasmaClient plasmaClient = plasmaClients.get(clientRoundRobin.getAndAdd(1) % clientPoolSize);
         ChunkDescriptor descriptor= chunks.get(i);
-        byte [] objectId = hash(String.valueOf(descriptor.hashCode()+currentBlock));
-        if (plasmaClient.contains(objectId)) {
-          ByteBuffer byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
-          List<ByteBuffer> byteBufferList = new ArrayList<>();
-          byteBufferList.add(byteBuffer);
-          if (i < chunks.size() - 1) {
-            result.add(new Chunk(descriptor, byteBufferList));
-          } else {
-            // because of a bug, the last chunk might be larger than descriptor.size
-            result.add(new WorkaroundChunk(descriptor, byteBufferList, f));
-          }
+        byte [] objectId = hash(file.toString()+currentBlock+ descriptor.fileOffset);
+        List<ByteBuffer> byteBufferList = new ArrayList<>();
+        ByteBuffer byteBuffer = null;
+        if (plasmaClient.contains(objectId)){
+            byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
+            byteBufferList.add(byteBuffer);
         } else {
-          ByteBuffer byteBuffer = null;
-          try{
+          f.seek(currentOffSet);
+          try {
             byteBuffer = plasmaClient.create(objectId, descriptor.size);
-          }catch (Exception e){
-            LOG.error("Error occurred when creating cache byteBuffer: "+ e.getMessage());
+            f.readFully(byteBuffer);
+            byteBuffer.flip();
+            plasmaClient.seal(objectId);
+          }catch (DuplicateObjectException dpoe){
+            LOG.warn("Duplicate Object: "+ dpoe.getMessage());
+            byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
           }
-          f.seek(currentOffset);
-          f.readFully(byteBuffer);
-          plasmaClient.seal(objectId);
-          List<ByteBuffer> byteBufferList = new ArrayList<>();
-          byteBuffer.flip();
           byteBufferList.add(byteBuffer);
-          if (i < chunks.size() - 1) {
-            result.add(new Chunk(descriptor, byteBufferList));
-          } else {
-            // because of a bug, the last chunk might be larger than descriptor.size
-            result.add(new WorkaroundChunk(descriptor, byteBufferList, f));
-          }
         }
-        currentOffset += descriptor.size;
+        if (i < chunks.size() - 1) {
+          result.add(new Chunk(descriptor, byteBufferList));
+        } else {
+          // because of a bug, the last chunk might be larger than descriptor.size
+          result.add(new WorkaroundChunk(descriptor, byteBufferList, f));
+        }
+        currentOffSet += descriptor.size;
       }
       // report in a counter the data we just scanned
       BenchmarkCounter.incrementBytesRead(length);
