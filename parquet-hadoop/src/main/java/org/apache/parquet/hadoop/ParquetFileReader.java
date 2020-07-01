@@ -1089,7 +1089,7 @@ public class ParquetFileReader implements Closeable {
   }
 
   private static String plasmaCacheSocket = "/tmp/plasmaStore";
-  public static int clientPoolSize = 20;
+  public static int clientPoolSize = 4;
   private AtomicInteger clientRoundRobin = new AtomicInteger(0);
   static List<PlasmaClient> plasmaClients = new ArrayList<>();
 
@@ -1103,7 +1103,6 @@ public class ParquetFileReader implements Closeable {
    * initialize plasma Clients
    */
   static {
-    LOG.debug("************************* initializing plasma clients");
     try {
       System.loadLibrary("plasma_java");
     } catch (Exception e) {
