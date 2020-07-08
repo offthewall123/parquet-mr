@@ -918,7 +918,7 @@ public class ParquetFileReader implements Closeable {
       }
     } finally {
       // cache release logic
-      for( Entry<byte[], Long> entry : objectIds.entrySet()) {
+      for(Entry<byte[], Long> entry : objectIds.entrySet()) {
         for(long i = 0 ; i < entry.getValue(); i++) {
           try {
             plasmaClient.release(entry.getKey());
