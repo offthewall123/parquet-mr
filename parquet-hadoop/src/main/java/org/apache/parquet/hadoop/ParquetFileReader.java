@@ -1188,21 +1188,6 @@ public class ParquetFileReader implements Closeable {
       length += descriptor.size;
     }
 
-    public ByteBuffer cache (byte [] objectId, SeekableInputStream f, PlasmaClient plasmaClient, int size) throws IOException {
-      ByteBuffer byteBuffer =null;
-      try {
-        byteBuffer = plasmaClient.create(objectId, size);
-        f.readFully(byteBuffer);
-        byteBuffer.flip();
-        plasmaClient.seal(objectId);
-      } catch (DuplicateObjectException e) {
-        LOG.warn("Duplicate Object: "+ e.getMessage());
-        byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
-      }
-
-      return byteBuffer;
-    }
-
     /**
      * @param f file to read the chunks from
      * @return the chunks
