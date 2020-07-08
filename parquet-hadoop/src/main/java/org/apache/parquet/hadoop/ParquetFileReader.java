@@ -1128,8 +1128,8 @@ public class ParquetFileReader implements Closeable {
     }
     try {
       plasmaClient = new PlasmaClient(plasmaCacheSocket, "", 0);
-    }catch (Exception e){
-      LOG.error("Error occurred when connecting to plasma server: "+ e.getMessage());
+    } catch (Exception e){
+      LOG.error("Error occurred when connecting to plasma server: " + e.getMessage());
     }
   }
 
@@ -1197,13 +1197,13 @@ public class ParquetFileReader implements Closeable {
      */
     public List<Chunk> readAll(SeekableInputStream f, int currentBlock) throws IOException {
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
-      for(int i = 0;i<chunks.size();i++){
+      for (int i = 0; i<chunks.size(); i++) {
         ChunkDescriptor descriptor= chunks.get(i);
         byte [] objectId = hash(file.toString()+currentBlock+ descriptor.fileOffset);
         objectIds.add(objectId);
         List<ByteBuffer> byteBufferList = new ArrayList<>();
         ByteBuffer byteBuffer = null;
-        if (plasmaClient.contains(objectId)){
+        if (plasmaClient.contains(objectId)) {
             byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
             byteBufferList.add(byteBuffer);
         } else {
@@ -1213,8 +1213,8 @@ public class ParquetFileReader implements Closeable {
             f.readFully(byteBuffer);
             byteBuffer.flip();
             plasmaClient.seal(objectId);
-          }catch (DuplicateObjectException dpoe){
-            LOG.warn("Duplicate Object: "+ dpoe.getMessage());
+          } catch (DuplicateObjectException dpoe){
+            LOG.warn("Duplicate Object: " + dpoe.getMessage());
             byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
           }
           byteBufferList.add(byteBuffer);
