@@ -43,6 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.google.common.hash.Hashing;
 import org.apache.arrow.plasma.PlasmaClient;
 import org.apache.arrow.plasma.exceptions.DuplicateObjectException;
+import org.apache.arrow.plasma.exceptions.PlasmaClientException;
 import org.apache.arrow.plasma.exceptions.PlasmaGetException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -99,6 +100,8 @@ public class ParquetFileReader implements Closeable {
   public static String PARQUET_READ_PARALLELISM = "parquet.metadata.read.parallelism";
 
   private final ParquetMetadataConverter converter;
+
+  private  HashSet<byte[]> objectIds = new HashSet<>(500);
 
   /**
    * for files provided, check if there's a summary file.
@@ -907,6 +910,16 @@ public class ParquetFileReader implements Closeable {
         f.close();
       }
     } finally {
+      // cache release logic
+      for (byte [] obj : objectIds) {
+        try {
+          plasmaClients.get(clientRoundRobin.getAndAdd(1) % clientPoolSize).release(obj);
+        } catch (PlasmaClientException e) {
+          LOG.warn("release exception: " +e.getMessage());
+          continue;
+        }
+      }
+      objectIds.clear();
       options.getCodecFactory().release();
     }
   }
@@ -1089,7 +1102,7 @@ public class ParquetFileReader implements Closeable {
   }
 
   private static String plasmaCacheSocket = "/tmp/plasmaStore";
-  public static int clientPoolSize = 4;
+  public static int clientPoolSize = 1;
   private AtomicInteger clientRoundRobin = new AtomicInteger(0);
   static List<PlasmaClient> plasmaClients = new ArrayList<>();
 
@@ -1201,6 +1214,7 @@ public class ParquetFileReader implements Closeable {
         PlasmaClient plasmaClient = plasmaClients.get(clientRoundRobin.getAndAdd(1) % clientPoolSize);
         ChunkDescriptor descriptor= chunks.get(i);
         byte [] objectId = hash(file.toString()+currentBlock+ descriptor.fileOffset);
+        objectIds.add(objectId);
         List<ByteBuffer> byteBufferList = new ArrayList<>();
         ByteBuffer byteBuffer = null;
         if (plasmaClient.contains(objectId)){
