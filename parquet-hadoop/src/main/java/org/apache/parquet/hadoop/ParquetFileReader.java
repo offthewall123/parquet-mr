@@ -107,9 +107,9 @@ public class ParquetFileReader implements Closeable {
   public static String PARQUET_READ_PARALLELISM = "parquet.metadata.read.parallelism";
 
   private final ParquetMetadataConverter converter;
-
-  private  HashSet<byte[]> objectIds = new HashSet<>(500);
-
+  
+  private HashMap<byte[], Long> objectIds = new HashMap<>(500);
+  
   /**
    * for files provided, check if there's a summary file.
    * If a summary file is found it is used otherwise the file footer is used.
@@ -918,12 +918,14 @@ public class ParquetFileReader implements Closeable {
       }
     } finally {
       // cache release logic
-      for (byte [] obj : objectIds) {
-        try {
-          plasmaClient.release(obj);
-        } catch (PlasmaClientException e) {
-          LOG.warn("release exception: " +e.getMessage());
-          continue;
+      for( Entry<byte[], Long> entry : objectIds.entrySet()) {
+        for(long i = 0 ; i < entry.getValue(); i++) {
+          try {
+            plasmaClient.release(entry.getKey());
+          } catch (PlasmaClientException e) {
+            LOG.warn("release exception: " +e.getMessage());
+            continue;
+          }
         }
       }
       objectIds.clear();
@@ -1200,12 +1202,12 @@ public class ParquetFileReader implements Closeable {
       for (int i = 0; i<chunks.size(); i++) {
         ChunkDescriptor descriptor= chunks.get(i);
         byte [] objectId = hash(file.toString() + currentBlock + descriptor.fileOffset);
-        objectIds.add(objectId);
         List<ByteBuffer> byteBufferList = new ArrayList<>();
         ByteBuffer byteBuffer = null;
         if (plasmaClient.contains(objectId)) {
             byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
             byteBufferList.add(byteBuffer);
+            objectIds.put(objectId,objectIds.getOrDefault(objectId, 0l) + 1);
         } else {
           f.seek(currentOffSet);
           try {
@@ -1218,6 +1220,7 @@ public class ParquetFileReader implements Closeable {
             byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
           }
           byteBufferList.add(byteBuffer);
+          objectIds.put(objectId,objectIds.getOrDefault(objectId, 0l) + 1);
         }
         if (i < chunks.size() - 1) {
           result.add(new Chunk(descriptor, byteBufferList));
