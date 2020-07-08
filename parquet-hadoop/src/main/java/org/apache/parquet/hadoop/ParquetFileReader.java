@@ -913,7 +913,7 @@ public class ParquetFileReader implements Closeable {
       // cache release logic
       for (byte [] obj : objectIds) {
         try {
-          plasmaClients.get(clientRoundRobin.getAndAdd(1) % clientPoolSize).release(obj);
+          plasmaClient.release(obj);
         } catch (PlasmaClientException e) {
           LOG.warn("release exception: " +e.getMessage());
           continue;
@@ -1102,9 +1102,7 @@ public class ParquetFileReader implements Closeable {
   }
 
   private static String plasmaCacheSocket = "/tmp/plasmaStore";
-  public static int clientPoolSize = 1;
-  private AtomicInteger clientRoundRobin = new AtomicInteger(0);
-  static List<PlasmaClient> plasmaClients = new ArrayList<>();
+  public static PlasmaClient plasmaClient;
 
   public byte[] hash(String key){
     byte[] res= new byte[20];
@@ -1121,13 +1119,10 @@ public class ParquetFileReader implements Closeable {
     } catch (Exception e) {
       LOG.error("load plasma jni lib failed" + e.getMessage());
     }
-    for (int i=0;i<clientPoolSize;i++){
-      try {
-        PlasmaClient plasmaClient = plasmaClient = new PlasmaClient(plasmaCacheSocket, "", 0);
-        plasmaClients.add(plasmaClient);
-      }catch (Exception e){
-        LOG.error("Error occurred when connecting to plasma server: "+ e.getMessage());
-      }
+    try {
+      plasmaClient = new PlasmaClient(plasmaCacheSocket, "", 0);
+    }catch (Exception e){
+      LOG.error("Error occurred when connecting to plasma server: "+ e.getMessage());
     }
   }
 
@@ -1196,7 +1191,6 @@ public class ParquetFileReader implements Closeable {
     public List<Chunk> readAll(SeekableInputStream f, int currentBlock) throws IOException {
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
       for(int i = 0;i<chunks.size();i++){
-        PlasmaClient plasmaClient = plasmaClients.get(clientRoundRobin.getAndAdd(1) % clientPoolSize);
         ChunkDescriptor descriptor= chunks.get(i);
         byte [] objectId = hash(file.toString()+currentBlock+ descriptor.fileOffset);
         objectIds.add(objectId);
