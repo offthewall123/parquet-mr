@@ -1199,7 +1199,7 @@ public class ParquetFileReader implements Closeable {
      */
     public List<Chunk> readAll(SeekableInputStream f, int currentBlock) throws IOException {
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
-      for (int i = 0; i<chunks.size(); i++) {
+      for (int i = 0; i < chunks.size(); i++) {
         ChunkDescriptor descriptor= chunks.get(i);
         byte [] objectId = hash(file.toString() + currentBlock + descriptor.fileOffset);
         List<ByteBuffer> byteBufferList = new ArrayList<>();
