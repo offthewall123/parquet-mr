@@ -39,7 +39,7 @@
     <dependency>
       <groupId>com.intel.arrow</groupId>
       <artifactId>arrow-plasma</artifactId>
-      <version>0.17.0</version>
+      <version>${plasma.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.parquet</groupId>
