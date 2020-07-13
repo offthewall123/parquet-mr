@@ -51,6 +51,7 @@ import java.util.concurrent.Future;
 import com.google.common.hash.Hashing;
 import org.apache.arrow.plasma.PlasmaClient;
 import org.apache.arrow.plasma.exceptions.DuplicateObjectException;
+import org.apache.arrow.plasma.exceptions.ObjectHitCountNotReachedKException;
 import org.apache.arrow.plasma.exceptions.PlasmaClientException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -1201,7 +1202,7 @@ public class ParquetFileReader implements Closeable {
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
       for (int i = 0; i < chunks.size(); i++) {
         ChunkDescriptor descriptor= chunks.get(i);
-        byte [] objectId = hash(file.toString() + currentBlock + descriptor.fileOffset);
+        byte[] objectId = hash(file.toString() + currentBlock + descriptor.fileOffset);
         List<ByteBuffer> byteBufferList = new ArrayList<>();
         ByteBuffer byteBuffer = null;
         if (plasmaClient.contains(objectId)) {
@@ -1215,12 +1216,18 @@ public class ParquetFileReader implements Closeable {
             f.readFully(byteBuffer);
             byteBuffer.flip();
             plasmaClient.seal(objectId);
-          } catch (DuplicateObjectException dpoe){
+            objectIds.put(objectId,objectIds.getOrDefault(objectId, 0l) + 1);
+          } catch (DuplicateObjectException dpoe) {
             LOG.warn("Duplicate Object: " + dpoe.getMessage());
             byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
+            objectIds.put(objectId,objectIds.getOrDefault(objectId, 0l) + 1);
+          } catch (ObjectHitCountNotReachedKException e) {
+            LOG.warn(objectId + " not reached LRU_K, will read from disk.");
+            byte[] bytes = new byte[descriptor.size];
+            f.readFully(bytes, (int)currentOffSet, descriptor.size);
+            byteBuffer = ByteBuffer.wrap(bytes);
           }
           byteBufferList.add(byteBuffer);
-          objectIds.put(objectId,objectIds.getOrDefault(objectId, 0l) + 1);
         }
         if (i < chunks.size() - 1) {
           result.add(new Chunk(descriptor, byteBufferList));

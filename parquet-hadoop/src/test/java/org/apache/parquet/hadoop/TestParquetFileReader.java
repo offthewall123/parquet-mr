@@ -91,10 +91,8 @@ public class TestParquetFileReader {
 
   @Test
   public void testReadAll() throws IOException {
-
     File testFile = temp.newFile();
     testFile.delete();
-
     Path path = new Path(testFile.toURI());
     Configuration configuration = new Configuration();
 
@@ -137,12 +135,39 @@ public class TestParquetFileReader {
 
     ParquetFileReader r = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
       readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
-
+    
     PageReadStore pages = r.readNextRowGroup();
     assertEquals(3, pages.getRowCount());
-    validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
-    validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
+  
+    ParquetFileReader r2 = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
+            readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
+    PageReadStore pages2 = r2.readNextRowGroup();
+    assertEquals(3, pages2.getRowCount());
+  
+    ParquetFileReader r3 = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
+            readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
+    PageReadStore pages3 = r3.readNextRowGroup();
+    assertEquals(3, pages3.getRowCount());
 
+//    ParquetFileReader r1 = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
+//            readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
+//    PageReadStore pages1 = r1.readNextRowGroup();
+//    assertEquals(3, pages1.getRowCount());
+//  
+//    ParquetFileReader r2 = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
+//            readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
+//    PageReadStore pages2 = r2.readNextRowGroup();
+//    assertEquals(3, pages2.getRowCount());
+//    
+//    validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
+//    validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
+    
+//    for(int i = 0 ;i < 3; i++){
+//      PageReadStore pages = r.readNextRowGroup();
+//      assertEquals(3, pages.getRowCount());
+//      validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
+//      validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
+//    }
   }
 
   private org.apache.parquet.column.statistics.Statistics<?> statsC1(Binary... values) {
