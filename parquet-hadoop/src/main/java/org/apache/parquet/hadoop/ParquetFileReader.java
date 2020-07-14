@@ -52,6 +52,7 @@ import com.google.common.hash.Hashing;
 import org.apache.arrow.plasma.PlasmaClient;
 import org.apache.arrow.plasma.exceptions.DuplicateObjectException;
 import org.apache.arrow.plasma.exceptions.PlasmaClientException;
+import org.apache.arrow.plasma.exceptions.PlasmaGetException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -107,9 +108,9 @@ public class ParquetFileReader implements Closeable {
   public static String PARQUET_READ_PARALLELISM = "parquet.metadata.read.parallelism";
 
   private final ParquetMetadataConverter converter;
-  
+
   private HashMap<byte[], Long> objectIds = new HashMap<>(500);
-  
+
   /**
    * for files provided, check if there's a summary file.
    * If a summary file is found it is used otherwise the file footer is used.
@@ -923,7 +924,7 @@ public class ParquetFileReader implements Closeable {
           try {
             plasmaClient.release(entry.getKey());
           } catch (PlasmaClientException e) {
-            LOG.warn("release exception: " +e.getMessage());
+            LOG.warn("release exception: " + e.getMessage());
             continue;
           }
         }
@@ -1201,13 +1202,20 @@ public class ParquetFileReader implements Closeable {
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
       for (int i = 0; i < chunks.size(); i++) {
         ChunkDescriptor descriptor= chunks.get(i);
-        byte [] objectId = hash(file.toString() + currentBlock + descriptor.fileOffset);
+        byte[] objectId = hash(file.toString() + currentBlock + descriptor.fileOffset);
         List<ByteBuffer> byteBufferList = new ArrayList<>();
         ByteBuffer byteBuffer = null;
         if (plasmaClient.contains(objectId)) {
-            byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
-            byteBufferList.add(byteBuffer);
-            objectIds.put(objectId,objectIds.getOrDefault(objectId, 0l) + 1);
+            try {
+              byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
+              objectIds.put(objectId,objectIds.getOrDefault(objectId, 0l) + 1);
+            } catch (PlasmaGetException e) {
+              LOG.warn("PlasmaGetException: " + e.getMessage());
+              byte[] bytes = new byte[descriptor.size];
+              f.readFully(bytes, (int)currentOffSet, descriptor.size);
+              byteBuffer = ByteBuffer.wrap(bytes);
+            }
+          byteBufferList.add(byteBuffer);
         } else {
           f.seek(currentOffSet);
           try {
