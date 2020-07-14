@@ -138,17 +138,19 @@ public class TestParquetFileReader {
     
     PageReadStore pages = r.readNextRowGroup();
     assertEquals(3, pages.getRowCount());
+    r.close();
   
     ParquetFileReader r2 = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
             readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
     PageReadStore pages2 = r2.readNextRowGroup();
     assertEquals(3, pages2.getRowCount());
+    r2.close();
   
     ParquetFileReader r3 = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
             readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
     PageReadStore pages3 = r3.readNextRowGroup();
     assertEquals(3, pages3.getRowCount());
-
+    r3.close();
 //    ParquetFileReader r1 = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
 //            readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
 //    PageReadStore pages1 = r1.readNextRowGroup();
