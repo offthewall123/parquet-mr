@@ -24,9 +24,13 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.parquet.HadoopReadOptions;
+import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.Version;
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel;
+import org.apache.parquet.hadoop.util.CacheInputFile;
+import org.apache.parquet.io.InputFile;
 import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
@@ -177,6 +181,27 @@ public class TestParquetFileWriter {
     expectedEncoding.add(BIT_PACKED);
     assertEquals(expectedEncoding,readFooter.getBlocks().get(0).getColumns().get(0).getEncodings());
 
+    {
+      ParquetReadOptions options = HadoopReadOptions.builder(configuration).build();
+      InputFile cacheInputFile = CacheInputFile.fromPath(path, configuration);
+      ParquetFileReader rr = new ParquetFileReader(cacheInputFile, options); 
+      PageReadStore pages = rr.readNextRowGroup();
+      assertEquals(3, pages.getRowCount());
+      validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
+      validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
+      validateContains(SCHEMA, pages, PATH2, 2, BytesInput.from(BYTES2));
+      validateContains(SCHEMA, pages, PATH2, 3, BytesInput.from(BYTES2));
+      validateContains(SCHEMA, pages, PATH2, 1, BytesInput.from(BYTES2));
+  
+      pages = rr.readNextRowGroup();
+      assertEquals(4, pages.getRowCount());
+  
+      validateContains(SCHEMA, pages, PATH1, 7, BytesInput.from(BYTES3));
+      validateContains(SCHEMA, pages, PATH2, 8, BytesInput.from(BYTES4));
+  
+      assertNull(rr.readNextRowGroup());
+    }
+    
     { // read first block of col #1
       ParquetFileReader r = new ParquetFileReader(configuration, readFooter.getFileMetaData(), path,
           Arrays.asList(readFooter.getBlocks().get(0)), Arrays.asList(SCHEMA.getColumnDescription(PATH1)));
