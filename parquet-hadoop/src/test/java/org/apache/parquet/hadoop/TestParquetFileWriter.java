@@ -306,6 +306,40 @@ public class TestParquetFileWriter {
         firstRowGroupEnds < 120);
     assertEquals("Second row group should start at the block size",
         120, readFooter.getBlocks().get(1).getStartingPos());
+  
+    {
+      ParquetFileReader r = new ParquetFileReader(conf, readFooter.getFileMetaData(), path,
+              readFooter.getBlocks(), Arrays.asList(SCHEMA.getColumnDescription(PATH1), SCHEMA.getColumnDescription(PATH2)));
+  
+      PageReadStore pages = r.readNextRowGroup();
+      assertEquals(3, pages.getRowCount());
+      validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
+      validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
+      validateContains(SCHEMA, pages, PATH2, 2, BytesInput.from(BYTES2));
+      validateContains(SCHEMA, pages, PATH2, 3, BytesInput.from(BYTES2));
+      validateContains(SCHEMA, pages, PATH2, 1, BytesInput.from(BYTES2));
+  
+      pages = r.readNextRowGroup();
+      assertEquals(4, pages.getRowCount());
+  
+      validateContains(SCHEMA, pages, PATH1, 7, BytesInput.from(BYTES3));
+      validateContains(SCHEMA, pages, PATH2, 8, BytesInput.from(BYTES4));
+  
+      assertNull(r.readNextRowGroup());
+    }
+    
+    {
+      ParquetReadOptions readOptions = ParquetReadOptions.builder().build();
+      
+      CacheInputFile cacheInputFile = CacheInputFile.fromPath(path, conf);
+      
+      ParquetFileReader r = new ParquetFileReader(cacheInputFile, readOptions);
+      
+      PageReadStore pages = r.readNextRowGroup();
+      assertEquals(3, pages.getRowCount());
+      validateContains(SCHEMA, pages, PATH1, 2, BytesInput.from(BYTES1));
+      validateContains(SCHEMA, pages, PATH1, 3, BytesInput.from(BYTES1));
+    }
 
     { // read first block of col #1
       ParquetFileReader r = new ParquetFileReader(conf, readFooter.getFileMetaData(), path,

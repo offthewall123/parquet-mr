@@ -1146,6 +1146,12 @@ public class ParquetFileReader implements Closeable {
       chunks.add(descriptor);
       length += descriptor.size;
     }
+    
+    public List<Chunk> readAllFromPmem(SeekableInputStream f) {
+      List<Chunk> result = new ArrayList<>();
+      
+      return result;
+    }
 
     /**
      * @param f file to read the chunks from
@@ -1153,6 +1159,10 @@ public class ParquetFileReader implements Closeable {
      * @throws IOException if there is an error while reading from the stream
      */
     public List<Chunk> readAll(SeekableInputStream f) throws IOException {
+//      if (options.pmemEnabled()) {
+//        return readAllFromPmem(f);  
+//      }
+      
       List<Chunk> result = new ArrayList<Chunk>(chunks.size());
       f.seek(offset);
 
@@ -1169,11 +1179,15 @@ public class ParquetFileReader implements Closeable {
       if (lastAllocationSize > 0) {
         buffers.add(options.getAllocator().allocate(lastAllocationSize));
       }
-
-      for (ByteBuffer buffer : buffers) {
-        f.readFully(buffer);
-        buffer.flip();
+      
+      for (int i = 0; i < buffers.size(); i++) {
+        f.readFully(buffers.get(i), file.toString(), currentBlock, i);
+//        buffers.get(i).flip();
       }
+//      for (ByteBuffer buffer : buffers) {
+//        f.readFully(buffer);
+//        buffer.flip();
+//      }
 
       // report in a counter the data we just scanned
       BenchmarkCounter.incrementBytesRead(length);

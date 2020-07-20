@@ -50,6 +50,7 @@ public class ParquetReadOptions {
   private final ByteBufferAllocator allocator;
   private final int maxAllocationSize;
   private final Map<String, String> properties;
+  private final boolean pmemEnabled = true;
 
   ParquetReadOptions(boolean useSignedStringMinMax,
                      boolean useStatsFilter,
@@ -73,6 +74,10 @@ public class ParquetReadOptions {
     this.properties = Collections.unmodifiableMap(properties);
   }
 
+  public boolean pmemEnabled () {
+    return pmemEnabled;  
+  }
+  
   public boolean useSignedStringMinMax() {
     return useSignedStringMinMax;
   }

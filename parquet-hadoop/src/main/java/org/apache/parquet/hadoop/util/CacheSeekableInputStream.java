@@ -20,6 +20,7 @@ package org.apache.parquet.hadoop.util;
 
 import com.google.common.hash.Hashing;
 import org.apache.arrow.plasma.PlasmaClient;
+import org.apache.arrow.plasma.exceptions.DuplicateObjectException;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.parquet.io.DelegatingSeekableInputStream;
 
@@ -96,6 +97,25 @@ public class CacheSeekableInputStream extends DelegatingSeekableInputStream {
             readFullyDirectBuffer(stream, buf, temp);
         }
     }
+    
+    public void readFully(ByteBuffer byteBuffer, String filename, int currentBlock, int bufferIndex) throws IOException {
+        byte [] objectId = hash(filename + currentBlock + bufferIndex);
+        if (plasmaClient.contains(objectId)) {
+            byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
+        } else {
+            try {
+                ByteBuffer tmp = plasmaClient.create(objectId, byteBuffer.capacity());
+                this.readFully(tmp);
+                tmp.flip();
+                plasmaClient.seal(objectId);
+                // memory copy?
+                byteBuffer = tmp;
+            } catch (DuplicateObjectException e) {
+                byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
+            }
+        }
+    }
+    
     
     // Visible for testing
     static void readFullyDirectBuffer(InputStream f, ByteBuffer buf, byte[] temp) throws IOException {

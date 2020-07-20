@@ -95,4 +95,8 @@ class H2SeekableInputStream extends DelegatingSeekableInputStream {
       }
     }
   }
+  public void readFully(ByteBuffer byteBuffer, String toString, int currentBlock, int i) throws IOException {
+    this.readFully(byteBuffer);
+    byteBuffer.flip();
+  }
 }
