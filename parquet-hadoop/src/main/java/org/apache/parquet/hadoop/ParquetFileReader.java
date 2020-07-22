@@ -54,6 +54,7 @@ import org.apache.arrow.plasma.exceptions.DuplicateObjectException;
 import org.apache.arrow.plasma.exceptions.ObjectHitCountNotReachedKException;
 import org.apache.arrow.plasma.exceptions.PlasmaClientException;
 import org.apache.arrow.plasma.exceptions.PlasmaGetException;
+import org.apache.arrow.plasma.exceptions.PlasmaOutOfMemoryException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -1225,6 +1226,11 @@ public class ParquetFileReader implements Closeable {
             byteBuffer.flip();
             plasmaClient.seal(objectId);
             objectIds.put(objectId,objectIds.getOrDefault(objectId, 0l) + 1);
+          } catch (PlasmaOutOfMemoryException e) {
+            LOG.warn("not enough memory on pmem for allocation");
+            byte[] bytes = new byte[descriptor.size];
+            f.readFully(bytes, (int)currentOffSet, descriptor.size);
+            byteBuffer = ByteBuffer.wrap(bytes);
           } catch (DuplicateObjectException dpoe) {
             LOG.warn("Duplicate Object: " + dpoe.getMessage());
             byteBuffer = plasmaClient.getObjAsByteBuffer(objectId, -1, false);
@@ -1234,7 +1240,7 @@ public class ParquetFileReader implements Closeable {
             byte[] bytes = new byte[descriptor.size];
             f.readFully(bytes, (int)currentOffSet, descriptor.size);
             byteBuffer = ByteBuffer.wrap(bytes);
-          }
+          } 
           byteBufferList.add(byteBuffer);
         }
         if (i < chunks.size() - 1) {
